@@ -27,6 +27,10 @@ import numpy as np
 
 SR = 48000
 LEVEL = 10 ** (-20 / 20)  # speech RMS, both voices
+# A phone's speaker at full volume is still quieter than a voice, so the mic
+# track is louder, its peaks limited to CEILING.
+MIC_GAIN_DB = 12
+CEILING = 10 ** (-1 / 20)
 HERE = Path(__file__).parent
 OUT = HERE / "ablation"
 
@@ -46,6 +50,17 @@ def tts(voice, text, tmp):
     nz = np.flatnonzero(np.abs(x) > 1e-3)
     x = x[nz[0]:nz[-1] + 1]
     return x * LEVEL / np.sqrt(np.mean(x ** 2))
+
+
+def limit(x, ceiling=CEILING, hold=0.04):
+    """Peak limiter: the gain is the lowest one needed within ±hold, smoothed over hold."""
+    need = np.minimum(1, ceiling / np.maximum(np.abs(x), 1e-9))
+    w = int(hold * SR) | 1
+    padded = np.pad(need, w, constant_values=1)
+    gain = np.lib.stride_tricks.sliding_window_view(padded, 2 * w + 1).min(axis=1)[:len(x)]
+    kernel = np.ones(w) / w
+    gain = np.convolve(np.pad(gain, w, mode="edge"), kernel, mode="same")[w:-w]
+    return x * gain
 
 
 def beep(freq, dur=0.25, level=-14):
@@ -73,6 +88,7 @@ def main():
     system, mic = np.zeros(0), np.zeros(0)
     with tempfile.TemporaryDirectory() as tmp:
         mic_clip, system_clip = tts(MIC_VOICE, MIC_TEXT, tmp), tts(SYSTEM_VOICE, SYSTEM_TEXT, tmp)
+    mic_clip = limit(mic_clip * 10 ** (MIC_GAIN_DB / 20))
     put(mic, beep(2000, 0.1), 0.0)
     put(mic, beep(2000, 0.1), 0.2)
     t = 2.0
