@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>回声测试 · 手机</title>
+<style>
+  body { font: 17px/1.5 -apple-system, sans-serif; margin: 0; padding: 24px 20px; color: #222; text-align: center; }
+  h1 { font-size: 20px; }
+  button { font: inherit; font-size: 22px; padding: 18px 40px; border-radius: 14px; border: 0; background: #0a66d8; color: #fff; }
+  button:disabled { opacity: .4; }
+  #state { font-size: 24px; font-weight: 600; margin: 28px 0 8px; }
+  #detail { color: #555; min-height: 3em; }
+  .hint { color: #777; font-size: 14px; text-align: left; margin-top: 32px; }
+  .ok { color: #188038; } .warn { color: #c5221f; }
+  video { position: fixed; width: 1px; height: 1px; opacity: .01; bottom: 0; left: 0; }
+</style>
+</head>
+<body>
+<h1>回声测试 · 手机端（近端说话人）</h1>
+<button id="arm">准备</button>
+<div id="state">未准备</div>
+<div id="detail"></div>
+<div class="hint">
+  · 关掉静音开关，音量用侧键调，在 Mac 页面上“测手机”时匹配好，测试时不要再动。<br>
+  · 测试过程中屏幕保持亮着，别切到别的 App。<br>
+  · 手机放在你平时开会时嘴的位置，扬声器朝向 Mac。
+</div>
+<video id="nosleep" src="/nosleep.mp4" muted playsinline loop></video>
+
+<script src="/common.js"></script>
+<script>
+let ctx, buf, info, source = null, progressTimer = null;
+
+listen('phone', async ev => {
+  if (!buf) return;
+  if (ev.type === 'calibrate') {
+    play(ev.at, ev.from, ev.to - ev.from, '校准：播放一遍');
+  } else if (ev.type === 'start') {
+    play(ev.at, 0, undefined, '测试中');
+  } else if (ev.type === 'stop') {
+    stop('已停止');
+  } else if (ev.type === 'done') {
+    stop('<span class="ok">完成</span>');
+  }
+});
+
+$('arm').onclick = async () => {
+  if (navigator.audioSession) navigator.audioSession.type = 'playback';
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const unlock = ctx.createBufferSource();
+  unlock.buffer = ctx.createBuffer(1, 1, 22050);
+  unlock.connect(ctx.destination);
+  unlock.start();
+  $('nosleep').play().catch(() => {});
+  $('arm').disabled = true;
+  $('state').textContent = '加载中…';
+  try {
+    await ctx.resume();
+    info = await (await fetch('/info')).json();
+    buf = await loadBuffer(ctx, '/audio/mic.wav');
+    await syncClock();
+    setInterval(() => { if (!source) syncClock(); }, 20000);
+    $('state').innerHTML = '<span class="ok">已准备</span>';
+    $('detail').textContent = `等待 Mac 开始（时钟误差约 ±${Math.ceil(clockRtt / 2)} ms）`;
+    post({ action: 'armed', role: 'phone', armed: true });
+  } catch (e) {
+    $('state').innerHTML = `<span class="warn">出错：${e.message}</span>`;
+    $('arm').disabled = false;
+  }
+};
+
+async function play(at, offset, duration, label) {
+  stop();
+  await ctx.resume();
+  const src = ctx.createBufferSource();
+  source = src;
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.onended = () => { if (source === src && label !== '测试中') stop('<span class="ok">已准备</span>', '校准播放完了'); };
+  src.start(ctxTimeAt(ctx, at), offset, duration);
+  $('state').textContent = label;
+  progressTimer = setInterval(() => {
+    const t = (serverNow() - at) / 1000;
+    if (label !== '测试中') { $('detail').textContent = t < 0 ? `${(-t).toFixed(1)} 秒后播放` : '播放中'; return; }
+    const k = slotAt(info, t);
+    $('detail').textContent = t < 0 ? `${(-t).toFixed(1)} 秒后开始` : `${t.toFixed(0)} / ${info.duration.toFixed(0)} 秒\n${k ? slotLabel(info, k) : ''}`;
+  }, 200);
+}
+
+function stop(state, detail = '') {
+  if (source) { const s = source; source = null; try { s.stop(); } catch (e) {} }
+  clearInterval(progressTimer);
+  if (state) { $('state').innerHTML = state; $('detail').textContent = detail; }
+}
+</script>
+</body>
+</html>
