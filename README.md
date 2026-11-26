@@ -1,31 +1,34 @@
 # voxt-echo-test
 
-一次录完的会议回声测试：Mac 外放"对方"（系统音轨），手机外放"自己"（麦克风音轨），两边同步播放，用来看 [Voxt](https://github.com/sgl-project/sglang-omni/tree/main/Voxt) 会议模式在不同外放音量下的回声消除效果，以及近端被压低了多少。
+A one-take echo test for meetings in [Voxt](https://github.com/sgl-project/sglang-omni/tree/main/Voxt). The Mac's speakers play the other side (the system track) and a phone plays you (the microphone track), in sync. The take shows how well echo cancellation works at several speaker volumes, and how much of your own voice it costs.
 
-| 段 | 系统音轨（Mac） | 麦克风音轨（手机） |
+| Slot | System track (Mac) | Microphone track (phone) |
 |---|---|---|
-| 1 | 无声 | 说话 |
-| 2 | 说话，音量 75% | 无声 |
-| 3 | 说话，音量 30% | 说话 |
-| 4 | 说话，音量 50% | 说话 |
-| 5 | 说话，音量 75% | 说话 |
+| 1 | silent | speaks |
+| 2 | speaks, volume 75% | silent |
+| 3 | speaks, volume 30% | speaks |
+| 4 | speaks, volume 50% | speaks |
+| 5 | speaks, volume 75% | speaks |
 
-- 每条音轨每段播放同一段音频，各段之间只有系统音量不同。
-- 第 k 段开头有 k 声哔。
-- 两条音轨不使用相同的词，避免转录稿的回声去重把两者混在一起。
+- Each track plays the same clip in every slot, so the slots differ only in the Mac's volume.
+- Slot k starts with k beeps.
+- The two tracks are Mandarin speech from the macOS voices Tingting and Meijia. They share no words, so Voxt's transcript echo check cannot confuse them.
+- The microphone track is 12 dB louder with its peaks limited, because a phone's speaker at full volume is still quieter than a voice.
 
-## 用法
+## Use
 
-需要 macOS（用到 `say`、`afconvert`、`osascript`）、Python 3 和 [uv](https://docs.astral.sh/uv/)。
+You need macOS (for `say`, `afconvert` and `osascript`), Python 3 and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-uv run --no-project --with numpy python -I make_ablation.py   # 生成 ablation/ 下的音频
-python3 server.py                                              # 端口默认 8766，可用 PORT 改
+uv run --no-project --with numpy python -I make_ablation.py   # makes the audio in ablation/
+python3 server.py                                              # port 8766, or set PORT
 ```
 
-1. **Mac：** 打开 http://localhost:8766/ ，点"准备"。
-2. **手机：** 和 Mac 连同一个 Wi-Fi，用 Safari 打开页面上显示的地址或扫码，点"准备"。
-3. **匹配响度：** 在 Mac 页面上点"测我的声音"，读出页面上的句子；再点"测手机"，按提示用侧键调手机音量，直到显示匹配。
-4. **测试：** 在 Voxt 里开始会议，然后在 Mac 页面上点"开始测试"。两边会同时开始播放，Mac 的系统音量按段自动切换，结束后恢复原来的音量。
+1. **Mac:** open http://localhost:8766/ and press "Ready".
+2. **Phone:** on the same Wi-Fi, open the address the Mac page shows (or scan its code) in Safari and tap "Ready".
+3. **Match the levels:** on the Mac page, press "Measure my voice" and read the line shown. Then press "Measure the phone" and set the phone's volume with its side buttons until the page says they match.
+4. **Test:** start a meeting in Voxt, then press "Start test" on the Mac page. Both devices start together. The server sets the Mac's output volume for each slot and puts it back at the end.
 
-不想用网页的话，可以用 `./ablation.sh` 在 Mac 上播放，听到 "go" 后手动在手机上播放 `ablation/mic.m4a`。
+The pages are in English and Chinese: use the switch at the top, or add `?lang=zh` or `?lang=en` to the address.
+
+Without the pages, `./ablation.sh` plays the system track on the Mac. Start `ablation/mic.m4a` on the phone by hand when the script says "go".

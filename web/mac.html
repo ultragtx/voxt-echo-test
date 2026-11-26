@@ -1,12 +1,13 @@
 <!doctype html>
-<html lang="zh">
+<html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>回声测试 · Mac</title>
+<title>Echo test · Mac</title>
 <style>
   body { font: 15px/1.5 -apple-system, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; color: #222; }
   h1 { font-size: 20px; } h2 { font-size: 16px; margin-top: 28px; }
+  #lang { float: right; font-size: 14px; }
   button { font: inherit; padding: 8px 16px; margin: 4px 8px 4px 0; border-radius: 8px; border: 1px solid #999; background: #f4f4f4; cursor: pointer; }
   button.primary { background: #0a66d8; color: #fff; border-color: #0a66d8; }
   button:disabled { opacity: .4; cursor: default; }
@@ -22,77 +23,77 @@
   #qr { margin-top: 8px; }
 </style>
 </head>
-<body>
-<h1>回声测试 · Mac 端</h1>
-<p id="presence" class="dim">连接中…</p>
+<body data-title="macTitle">
+<h1 data-t="macTitle"></h1>
+<p id="presence" class="dim" data-t="connecting"></p>
 
-<h2>1. 连接手机</h2>
-<p>手机和 Mac 连同一个 Wi-Fi，用手机 Safari 打开 <b id="phoneUrl"></b>（或扫码），点“准备”。</p>
+<h2 data-t="step1"></h2>
+<p data-t="step1Body"></p>
 <div id="qr"></div>
 
-<h2>2. 准备 Mac</h2>
-<button id="arm" class="primary">准备（加载音频、打开麦克风）</button>
+<h2 data-t="step2"></h2>
+<button id="arm" class="primary" data-t="arm"></button>
 <span id="armState" class="dim"></span>
 
-<h2>3. 匹配响度</h2>
+<h2 data-t="step3"></h2>
 <div class="row"><div id="meter"><div id="bar"></div><div id="peak"></div></div><span id="db">— dB</span></div>
-<p class="dim">手机放在你平时开会时嘴的位置，屏幕朝向 Mac；你也坐在平时的位置说话。</p>
-<p>用平时开会的音量读：</p>
+<p class="dim" data-t="placement"></p>
+<p data-t="readThis"></p>
 <p class="read" id="micText"></p>
-<div class="row">
-  <button id="measureMe" disabled>测我的声音</button><span id="me" class="dim">—</span>
-</div>
-<div class="row">
-  <button id="measurePhone" disabled>测手机</button><span id="phone" class="dim">—</span>
-</div>
+<div class="row"><button id="measureMe" data-t="measureMe" disabled></button><span id="me" class="dim">—</span></div>
+<div class="row"><button id="measurePhone" data-t="measurePhone" disabled></button><span id="phone" class="dim">—</span></div>
 <p id="diff"></p>
 
-<h2>4. 测试</h2>
-<p>先在 Voxt 里<b>开始会议</b>，再点“开始测试”。测试时手机音量不要动。</p>
-<button id="start" class="primary" disabled>开始测试</button>
-<button id="stop" disabled>停止</button>
+<h2 data-t="step4"></h2>
+<p data-t="step4Body"></p>
+<button id="start" class="primary" data-t="start" disabled></button>
+<button id="stop" data-t="stop" disabled></button>
 <p id="progress"></p>
 <table id="slots"></table>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="/common.js"></script>
 <script>
+applyStrings();
+
 let ctx, buf, info, stream, micSource, meterNode, workletLoaded = false;
 let collecting = null, peak = -100, peakAt = 0;
-let levels = { me: null, phone: null };
+const levels = { me: null, phone: null };
 let source = null, startAt = null, progressTimer = null;
 
 (async () => {
   info = await (await fetch('/info')).json();
-  $('phoneUrl').textContent = info.phoneUrl;
+  const phoneUrl = info.phoneUrl + (LANG === 'en' ? '' : '?lang=' + LANG);
+  $('phoneUrl').textContent = phoneUrl;
   $('micText').textContent = info.timeline.find(x => x.track === 'mic').text;
-  try { new QRCode($('qr'), { text: info.phoneUrl, width: 140, height: 140 }); } catch (e) {}
+  try { new QRCode($('qr'), { text: phoneUrl, width: 140, height: 140 }); } catch (e) {}
   renderSlots(0);
 })();
 
 listen('mac', ev => {
   if (ev.type === 'presence') {
-    const p = ev.connected.phone ? (ev.armed.phone ? '<span class="ok">手机已准备</span>' : '手机已连接，等它点“准备”') : '<span class="warn">手机未连接</span>';
-    $('presence').innerHTML = p;
+    $('presence').innerHTML = ev.connected.phone
+      ? (ev.armed.phone ? `<span class="ok">${t('phoneArmed')}</span>` : t('phoneConnected'))
+      : `<span class="warn">${t('phoneMissing')}</span>`;
   } else if (ev.type === 'calibrate') {
     measurePhone(ev);
   } else if (ev.type === 'start') {
     play(ev.at);
   } else if (ev.type === 'stop') {
-    stopPlay('已停止');
+    stopPlay(t('stopped'));
   } else if (ev.type === 'done') {
-    stopPlay('<span class="ok">完成，可以结束会议了。</span>');
+    stopPlay(`<span class="ok">${t('doneMac')}</span>`);
   }
 });
 
 $('arm').onclick = async () => {
   ctx = new AudioContext();
   await ctx.resume();
-  $('armState').textContent = '加载中…';
+  $('armState').textContent = t('loading');
   buf = await loadBuffer(ctx, '/audio/system.wav');
   await openMic();
   await syncClock();
-  $('armState').innerHTML = '<span class="ok">已准备</span>';
+  $('armState').innerHTML = `<span class="ok">${t('ready')}</span>`;
   $('arm').disabled = true;
   ['measureMe', 'measurePhone', 'start'].forEach(id => $(id).disabled = false);
   post({ action: 'armed', role: 'mac', armed: true });
@@ -127,11 +128,12 @@ async function openMic() {
 // while Voxt records.
 function closeMic() {
   if (!stream) return;
-  stream.getTracks().forEach(t => t.stop());
+  stream.getTracks().forEach(track => track.stop());
   micSource.disconnect();
   meterNode.disconnect();
   stream = null;
-  $('bar').style.width = 0; $('db').textContent = '— dB';
+  $('bar').style.width = 0;
+  $('db').textContent = '— dB';
 }
 
 const pct = d => Math.max(0, Math.min(100, (d + 70) / 70 * 100));
@@ -167,9 +169,9 @@ $('measureMe').onclick = async () => {
   await openMic();
   $('measureMe').disabled = true;
   for (const n of [3, 2, 1]) { $('me').textContent = `${n}…`; await sleep(1000); }
-  $('me').textContent = '请读上面那句话（10 秒）…';
+  $('me').textContent = t('readNow');
   levels.me = await collect(10000);
-  $('me').textContent = levels.me == null ? '没听到声音' : `你的声音：${levels.me.toFixed(1)} dB`;
+  $('me').textContent = levels.me == null ? t('noVoice') : t('myVoice', levels.me.toFixed(1));
   $('measureMe').disabled = false;
   showDiff();
 };
@@ -177,7 +179,7 @@ $('measureMe').onclick = async () => {
 $('measurePhone').onclick = async () => {
   await openMic();
   $('measurePhone').disabled = true;
-  $('phone').textContent = '手机播放中…';
+  $('phone').textContent = t('phonePlaying');
   post({ action: 'calibrate' });
 };
 
@@ -185,7 +187,7 @@ async function measurePhone(ev) {
   if (!stream) return;
   await sleep(msUntil(ev.at));
   levels.phone = await collect((ev.to - ev.from) * 1000 + 300);
-  $('phone').textContent = levels.phone == null ? '没听到手机（手机准备好了吗？）' : `手机：${levels.phone.toFixed(1)} dB`;
+  $('phone').textContent = levels.phone == null ? t('noPhone') : t('phoneLevel', levels.phone.toFixed(1));
   $('measurePhone').disabled = false;
   showDiff();
 }
@@ -194,8 +196,8 @@ function showDiff() {
   if (levels.me == null || levels.phone == null) return;
   const d = levels.phone - levels.me;
   $('diff').innerHTML = Math.abs(d) <= 1.5
-    ? `<span class="ok">✓ 匹配（相差 ${d.toFixed(1)} dB）</span>`
-    : `<span class="warn">手机比你${d < 0 ? '小' : '大'} ${Math.abs(d).toFixed(1)} dB → ${d < 0 ? '调大' : '调小'}手机音量，再测手机</span>`;
+    ? `<span class="ok">${t('matched', d.toFixed(1))}</span>`
+    : `<span class="warn">${t('mismatch', d > 0, Math.abs(d).toFixed(1))}</span>`;
 }
 
 $('start').onclick = () => {
@@ -207,17 +209,20 @@ $('stop').onclick = () => post({ action: 'stop' });
 
 function play(at) {
   closeMic();
-  if (!buf) { $('progress').innerHTML = '<span class="warn">Mac 还没准备</span>'; return; }
+  if (!buf) { $('progress').innerHTML = `<span class="warn">${t('macNotReady')}</span>`; return; }
   source = ctx.createBufferSource();
   source.buffer = buf;
   source.connect(ctx.destination);
   source.start(ctxTimeAt(ctx, at));
   startAt = at;
-  $('start').disabled = true; $('stop').disabled = false;
+  $('start').disabled = true;
+  $('stop').disabled = false;
   progressTimer = setInterval(() => {
-    const t = (serverNow() - startAt) / 1000;
-    const k = slotAt(info, t);
-    $('progress').textContent = t < 0 ? `${(-t).toFixed(1)} 秒后开始` : `${t.toFixed(1)} / ${info.duration.toFixed(0)} 秒 · ${k ? slotLabel(info, k) : '开头'}`;
+    const sec = (serverNow() - startAt) / 1000;
+    const k = slotAt(info, sec);
+    $('progress').textContent = sec < 0
+      ? t('startsIn', (-sec).toFixed(1))
+      : t('progress', sec.toFixed(1), info.duration.toFixed(0), k ? slotLabel(info, k) : t('lead'));
     renderSlots(k);
   }, 200);
 }
@@ -227,16 +232,16 @@ function stopPlay(message) {
   clearInterval(progressTimer);
   $('progress').innerHTML = message;
   renderSlots(0);
-  $('start').disabled = !buf; $('stop').disabled = true;
+  $('start').disabled = !buf;
+  $('stop').disabled = true;
 }
 
 function renderSlots(now) {
   if (!info) return;
-  $('slots').innerHTML = '<tr><th>段</th><th>系统</th><th>麦克风</th></tr>' + info.schedule.map((s, i) => {
+  $('slots').innerHTML = `<tr><th>${t('slot')}</th><th>${t('system')}</th><th>${t('mic')}</th></tr>` + info.schedule.map((_, i) => {
     const k = i + 1;
-    const sys = info.timeline.some(x => x.slot === k && x.track === 'system') ? `说话 ${s.volume}%` : '无声';
-    const mic = info.timeline.some(x => x.slot === k && x.track === 'mic') ? '说话' : '无声';
-    return `<tr class="${k === now ? 'now' : ''}"><td>${k}</td><td>${sys}</td><td>${mic}</td></tr>`;
+    const p = slotParts(info, k);
+    return `<tr class="${k === now ? 'now' : ''}"><td>${k}</td><td>${p.system}</td><td>${p.mic}</td></tr>`;
   }).join('');
 }
 </script>
