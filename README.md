@@ -10,9 +10,9 @@ A one-take echo test for meetings in [Voxt](https://github.com/sgl-project/sglan
 | 4 | speaks, volume 50% | speaks |
 | 5 | speaks, volume 75% | speaks |
 
-- Each track plays the same clip in every slot, so the slots differ only in the Mac's volume.
+- Each track says the same line in every slot, after the slot's number ("第三段。"), so the slots differ only in the Mac's volume. The number keeps Voxt's final pass from dropping a line as a repeat of the one before.
 - Slot k starts with k beeps.
-- The two tracks are Mandarin speech from the macOS voices Tingting and Meijia. They share no words, so Voxt's transcript echo check cannot confuse them.
+- The two tracks are Mandarin speech from the macOS voices Tingting and Meijia. Apart from the slot numbers they share no words, so Voxt's transcript echo check cannot confuse them (it needs half of a line in runs of three shared words).
 - The microphone track is 12 dB louder with its peaks limited, because a phone's speaker at full volume is still quieter than a voice.
 
 ## Use

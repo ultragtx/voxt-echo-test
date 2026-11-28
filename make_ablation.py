@@ -13,9 +13,9 @@ Slots (system / mic):
 Slot k starts with k 1 kHz beeps on the system track; the mic track starts
 with a 2 kHz double beep at 0 (sync marker in the raw mic). The system speech
 starts before and ends after the mic speech, so the near end is all double talk.
-Each track plays the same clip in every slot, so the slots differ only in the
-system volume. The two voices share no words, so the transcript's echo check
-cannot confuse them.
+Each track says the same line in every slot after the slot's number, so the slots
+differ only in the system volume. Apart from the numbers the two voices share no
+words, so the transcript's echo check cannot confuse them.
 """
 
 import subprocess
@@ -37,6 +37,14 @@ OUT = HERE / "ablation"
 MIC_TEXT = "麦克风在说话。今天上午我把季度报告的初稿发给了财务部，他们答应下周二之前给反馈。"
 SYSTEM_TEXT = "这里是对方的声音。昨晚的暴雨让城东好几条道路积水，地铁二号线也临时停运了一个多小时，很多人上班都迟到了。"
 MIC_SLOTS, SYSTEM_SLOTS = {1, 3, 4, 5}, {2, 3, 4, 5}
+# Each clip starts with its slot's number: Voxt's final pass drops a chunk whose text
+# is the same as the chunk before it, which would cost every other slot's line.
+SLOT_NAMES = {1: "一", 2: "二", 3: "三", 4: "四", 5: "五"}
+
+
+def labelled(k, text):
+    return f"第{SLOT_NAMES[k]}段。{text}"
+
 VOLUME = {1: 50, 2: 75, 3: 30, 4: 50, 5: 75}  # slot 1: only its beep plays
 MIC_VOICE, SYSTEM_VOICE = "Tingting", "Meijia"
 
@@ -87,8 +95,8 @@ def main():
     OUT.mkdir(exist_ok=True)
     system, mic = np.zeros(0), np.zeros(0)
     with tempfile.TemporaryDirectory() as tmp:
-        mic_clip, system_clip = tts(MIC_VOICE, MIC_TEXT, tmp), tts(SYSTEM_VOICE, SYSTEM_TEXT, tmp)
-    mic_clip = limit(mic_clip * 10 ** (MIC_GAIN_DB / 20))
+        mic_clips = {k: limit(tts(MIC_VOICE, labelled(k, MIC_TEXT), tmp) * 10 ** (MIC_GAIN_DB / 20)) for k in MIC_SLOTS}
+        system_clips = {k: tts(SYSTEM_VOICE, labelled(k, SYSTEM_TEXT), tmp) for k in SYSTEM_SLOTS}
     put(mic, beep(2000, 0.1), 0.0)
     put(mic, beep(2000, 0.1), 0.2)
     t = 2.0
@@ -99,16 +107,16 @@ def main():
         schedule.append((t - 0.3, VOLUME[k]))
         t += 0.2 * (k - 1)
         end = t
-        s = system_clip if k in SYSTEM_SLOTS else None
+        s = system_clips.get(k)
         if s is not None:
             put(system, s, t + 1.0)
-            timeline.append((k, "system", t + 1.0, t + 1.0 + len(s) / SR, SYSTEM_TEXT))
+            timeline.append((k, "system", t + 1.0, t + 1.0 + len(s) / SR, labelled(k, SYSTEM_TEXT)))
             end = max(end, t + 1.0 + len(s) / SR)
-        m = mic_clip if k in MIC_SLOTS else None
+        m = mic_clips.get(k)
         if m is not None:
             start = t + (1.8 if s is not None else 1.0)
             put(mic, m, start)
-            timeline.append((k, "mic", start, start + len(m) / SR, MIC_TEXT))
+            timeline.append((k, "mic", start, start + len(m) / SR, labelled(k, MIC_TEXT)))
             end = max(end, start + len(m) / SR)
         t = end + 1.5
     n = int((t + 1.0) * SR)
