@@ -1,2 +1,4 @@
 ablation/
 __pycache__/
+sync/
+.DS_Store

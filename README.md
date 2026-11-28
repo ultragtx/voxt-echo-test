@@ -32,3 +32,15 @@ python3 server.py                                              # port 8766, or s
 The pages are in English and Chinese: use the switch at the top, or add `?lang=zh` or `?lang=en` to the address.
 
 Without the pages, `./ablation.sh` plays the system track on the Mac. Start `ablation/mic.m4a` on the phone by hand when the script says "go".
+
+## Sync test
+
+To check only that Voxt's two recordings line up, the Mac's speakers alone are enough: the microphone hears them.
+
+```sh
+uv run --no-project --with numpy python -I sync_test.py make     # sync/chirps.wav
+afplay sync/chirps.wav                                           # during a Voxt meeting
+uv run --no-project --with numpy python -I sync_test.py measure ~/Library/Application\ Support/VoxtNew/meetings/<id>
+```
+
+It prints how much later each chirp is in `mic.wav` than in `system.wav`. Aligned, that is the sound's way from the speakers to the microphone (about 2 ms on a MacBook).
