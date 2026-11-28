@@ -44,3 +44,16 @@ uv run --no-project --with numpy python -I sync_test.py measure ~/Library/Applic
 ```
 
 It prints how much later each chirp is in `mic.wav` than in `system.wav`. Aligned, that is the sound's way from the speakers to the microphone (about 2 ms on a MacBook).
+
+## Recordings
+
+[recordings/](recordings/) holds Voxt meetings (`mic.wav`, `system.wav`, 16 kHz) from a MacBook Pro's built-in speakers and microphone, taken while Voxt's [meeting alignment](https://github.com/ultragtx/sglang-omni/tree/voxt-meeting-align-v2) was made. `sync_test.py measure <folder>` gives each one's lag (the whole recording's when it has no chirps):
+
+| Folder | Voxt | What played | Mic behind system |
+|---|---|---|---|
+| `voxt-2.1.4-chirps` | 2.1.4 | chirps | 234.5 ms, and `mic.wav` is 0.3 s longer |
+| `capture-time-ablation` | aligned by capture time, without the devices' latency | the ablation (system on the Mac, mic on a phone) | 61.0 ms |
+| `aligned-chirps` | aligned, with the devices' latency | chirps | 1.6–1.8 ms |
+| `aligned-chirps-pause-mode` | the same | chirps, with a pause and Meeting → Recording → Meeting | 1.6–1.8 ms; `system.wav` is silent while in Recording |
+
+1.7 ms is the sound's way from the speakers to the microphone.

@@ -7,7 +7,8 @@ system.wav is how far the two recordings are apart.
     uv run --no-project --with numpy python -I sync_test.py measure <meeting dir>
 
 The chirps (100 ms, 500 Hz to 4 kHz) are unlike any shift of themselves, and
-come at uneven gaps, so each one lines up at exactly one lag.
+come at uneven gaps, so the whole recording lines up at one lag (found first,
+however large); each chirp is then measured near it.
 """
 
 import sys
@@ -21,7 +22,7 @@ OUT = Path(__file__).parent / "sync"
 CHIRP_S, F0, F1 = 0.1, 500, 4000
 GAPS = [1.0, 1.3, 0.8, 1.1, 0.9, 1.4, 0.7, 1.2]  # between chirp starts, repeated
 COUNT = 40
-MAX_LAG = 0.4  # s searched either way
+REFINE = 0.05  # s searched either way around the whole-file lag
 
 
 def chirp(sr):
@@ -68,6 +69,15 @@ def peak(r):
     return float(k)
 
 
+def coarse_lag(a, b):
+    """Samples b lags a by, from the whole files (GCC-PHAT)."""
+    n = 1 << int(np.ceil(np.log2(len(a) + len(b))))
+    r = np.fft.rfft(b, n) * np.conj(np.fft.rfft(a, n))
+    x = np.fft.irfft(r / (np.abs(r) + 1e-12), n)
+    k = int(np.argmax(x))
+    return k if k < n // 2 else k - n
+
+
 def measure(meeting):
     meeting = Path(meeting)
     sysx, sr = load(meeting / "system.wav")
@@ -86,19 +96,28 @@ def measure(meeting):
             i = k + int(0.5 * sr)
         else:
             i += 1
+    # Speech can match a little: a chirp's window correlates with it almost wholly.
+    norm = np.linalg.norm(c)
+    found = [k for k in found if m[k] >= 0.5 * norm * np.linalg.norm(sysx[k:k + len(c)])]
+    base = coarse_lag(sysx, mic)
     lags, quality = [], []
-    span, n = int(MAX_LAG * sr), len(c)
+    span, n = int(REFINE * sr), len(c)
     for k in found:
-        lo, hi = k - span, k + n + span
+        lo, hi = k + base - span, k + base + n + span
         if lo < 0 or hi > len(mic):
             continue
-        r = np.correlate(mic[lo:hi], c, "valid")  # lag 0 at index span
+        r = np.correlate(mic[lo:hi], c, "valid")  # lag base at index span
         r = np.abs(r)
         p = peak(r)
-        lags.append((p - span) / sr * 1000)
+        if not 1 <= p <= len(r) - 2:
+            continue  # no match near the lag: a chirp one track cut short
+        lags.append((base + p - span) / sr * 1000)
         quality.append(r.max() / (np.median(r) + 1e-12))
+    keep = [q >= 0.3 * np.median(quality) for q in quality]
+    lags = [v for v, k in zip(lags, keep) if k]
+    quality = [q for q, k in zip(quality, keep) if k]
     if not lags:
-        print("no chirps found in system.wav")
+        print(f"no chirps; the whole recording's lag: {base / sr * 1000:.1f} ms")
         return
     lags = np.array(lags)
     print(f"{len(lags)} chirps; mic later than system by (ms):")
